@@ -19,7 +19,8 @@ class TestEnv:
         pass
 
     @staticmethod
-    def test_env(env, render=True, n_iters=10, pi=None, user_input=False, convert_state_obs=lambda state, done: state):
+    def test_env(env, render=True, n_iters=10, pi=None, user_input=False,
+                 convert_state_obs=lambda state, done: state):
         """
         Parameters
         ----------------------------
@@ -65,7 +66,7 @@ class TestEnv:
                     print("state is %i" % state)
                     print("policy output is %i" % pi(state))
                     while True:
-                        action = input("Please select 0 - %i then hit enter:\n" % int(n_actions-1))
+                        action = input("Please select 0 - %i then hit enter:\n" % int(n_actions - 1))
                         try:
                             action = int(action)
                         except ValueError:

@@ -6,6 +6,7 @@ Copyright (c) 2018, Miguel Morales
 All rights reserved.
 https://github.com/mimoralea/gdrl/blob/master/LICENSE
 """
+import gym
 
 """
 modified by: John Mansfield
@@ -22,16 +23,57 @@ Given enough episodes, tries to find an estimate of the optimal policy.
 
 import numpy as np
 from tqdm import tqdm
-from utils.callbacks import MyCallbacks
+from utils.callbacks import MyCallbacks, Callbacks
 from utils.decorators import print_runtime
 import warnings
 
 
 class RL:
-    def __init__(self, env):
+    env: gym.Env
+    callbacks: Callbacks
+    render: bool
+    n_episodes: int
+    nS: int
+    nA: int
+    Q: np.ndarray
+    Q_track: np.ndarray
+    policy: dict[int, int] | None
+    dtype: np.dtype
+
+    def __init__(self, env: gym.Env, n_episodes: int, nS: int, nA: int, dtype=np.float64):
+        """
+        Initialize the RL class with the environment and basic state action info.
+
+        We take the episodes, actions and state space as parameters because we
+        want to allocate the Q and Q_track arrays once and reuse them. Note: this
+        is intended for use with discrete state and action spaces. The values of
+        the Q and Q_track arrays are not reset between calls to q_learning or sarsa.
+        In order to reset the values, you can call the clear_q_values method.
+
+        :param env: An OpenAI gym environment
+        :param n_episodes: The number of episodes to run
+        :param nS: The number of states in the environment
+        :param nA: The number of actions in the environment
+        :param dtype: The data type of the Q and Q_track arrays, default is np.float64
+        """
         self.env = env
         self.callbacks = MyCallbacks()
         self.render = False
+
+        # pre-allocate arrays so that we don't have to do it every time
+        self.Q = np.zeros((nS, nA), dtype=np.float64)
+        self.Q_track = np.zeros((n_episodes, nS, nA), dtype=dtype)
+
+    def clear_q_values(self):
+        """
+        Clear the Q, Q_track, and policy function.
+
+        This is useful if you want to run multiple experiments without having to
+         reinitialize the RL class.
+        """
+        self.Q.fill(0)
+        self.Q_track.fill(0)
+        self.policy = None
 
     @staticmethod
     def decay_schedule(init_value, min_value, decay_ratio, max_steps, log_start=-2, log_base=10):
@@ -84,7 +126,8 @@ class RL:
                    init_epsilon=1.0,
                    min_epsilon=0.1,
                    epsilon_decay_ratio=0.9,
-                   n_episodes=10000):
+                   n_episodes=10000,
+                   **kwargs):
         """
         Parameters
         ----------------------------
@@ -141,13 +184,15 @@ class RL:
         pi_track {list}, len(n_episodes):
             Log of complete policy for each episode
         """
-        if nS is None:
-            nS=self.env.observation_space.n
-        if nA is None:
-            nA=self.env.action_space.n
+        # if nS is None:
+        #     nS = self.env.observation_space.n
+        # if nA is None:
+        #     nA = self.env.action_space.n
         pi_track = []
-        Q = np.zeros((nS, nA), dtype=np.float64)
-        Q_track = np.zeros((n_episodes, nS, nA), dtype=np.float64)
+        # TODO these arrays can be preallocated once if not exist, otherwise reset to zeros
+        # Q = np.zeros((nS, nA), dtype=np.float64)
+        # Q_track = np.zeros((n_episodes, nS, nA), dtype=np.float64)
+
         # Explanation of lambda:
         # def select_action(state, Q, epsilon):
         #   if np.random.random() > epsilon:
@@ -158,13 +203,13 @@ class RL:
             if np.random.random() > epsilon \
             else np.random.randint(len(Q[state]))
         alphas = RL.decay_schedule(init_alpha,
-                                min_alpha,
-                                alpha_decay_ratio,
-                                n_episodes)
+                                   min_alpha,
+                                   alpha_decay_ratio,
+                                   n_episodes)
         epsilons = RL.decay_schedule(init_epsilon,
-                                  min_epsilon,
-                                  epsilon_decay_ratio,
-                                  n_episodes)
+                                     min_epsilon,
+                                     epsilon_decay_ratio,
+                                     n_episodes)
         for e in tqdm(range(n_episodes), leave=False):
             self.callbacks.on_episode_begin(self)
             self.callbacks.on_episode(self, episode=e)
@@ -174,31 +219,35 @@ class RL:
             while not done:
                 if self.render:
                     warnings.warn("Occasional render has been deprecated by openAI.  Use test_env.py to render.")
-                action = select_action(state, Q, epsilons[e])
+                action = select_action(state, self.Q, epsilons[e])
                 next_state, reward, terminated, truncated, _ = self.env.step(action)
                 if truncated:
                     warnings.warn("Episode was truncated.  Bootstrapping 0 reward.")
                 done = terminated or truncated
                 self.callbacks.on_env_step(self)
-                next_state = convert_state_obs(next_state,done)
-                td_target = reward + gamma * Q[next_state].max() * (not done)
-                td_error = td_target - Q[state][action]
-                Q[state][action] = Q[state][action] + alphas[e] * td_error
+                next_state = convert_state_obs(next_state, done)
+                td_target = reward + gamma * self.Q[next_state].max() * (not done)
+                td_error = td_target - self.Q[state][action]
+                self.Q[state][action] = self.Q[state][action] + alphas[e] * td_error
                 state = next_state
-            Q_track[e] = Q
-            pi_track.append(np.argmax(Q, axis=1))
+            self.Q_track[e] = self.Q
+            pi_track.append(np.argmax(self.Q, axis=1))
             self.render = False
             self.callbacks.on_episode_end(self)
 
-        V = np.max(Q, axis=1)
+        V = np.max(self.Q, axis=1)
         # Explanation of lambda:
         # def pi(s):
         #   policy = dict()
         #   for state, action in enumerate(np.argmax(Q, axis=1)):
         #       policy[state] = action
         #   return policy[s]
-        pi = lambda s: {s: a for s, a in enumerate(np.argmax(Q, axis=1))}[s]
-        return Q, V, pi, Q_track, pi_track
+        # self.pi = lambda s: {s: a for s, a in enumerate(np.argmax(self.Q, axis=1))}[s]
+
+        # Let's not build to policy dictionary every time k thx
+        self.policy = {s: a for s, a in enumerate(np.argmax(self.Q, axis=1))}
+        pi = lambda s: self.policy[s]
+        return self.Q.copy(), V, pi, self.Q_track.copy(), pi_track
 
     @print_runtime
     def sarsa(self,
@@ -286,13 +335,13 @@ class RL:
             if np.random.random() > epsilon \
             else np.random.randint(len(Q[state]))
         alphas = RL.decay_schedule(init_alpha,
-                                min_alpha,
-                                alpha_decay_ratio,
-                                n_episodes)
+                                   min_alpha,
+                                   alpha_decay_ratio,
+                                   n_episodes)
         epsilons = RL.decay_schedule(init_epsilon,
-                                  min_epsilon,
-                                  epsilon_decay_ratio,
-                                  n_episodes)
+                                     min_epsilon,
+                                     epsilon_decay_ratio,
+                                     n_episodes)
 
         for e in tqdm(range(n_episodes), leave=False):
             self.callbacks.on_episode_begin(self)

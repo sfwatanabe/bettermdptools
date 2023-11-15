@@ -34,11 +34,11 @@ class Blackjack:
         file_name = 'blackjack-envP'
         f = os.path.join(current_dir, file_name)
         try:
-            self._P = pickle.load(open(f, "rb"))
+            self.env.P = pickle.load(open(f, "rb"))
         except IOError:
             print("Pickle load failed.  Check path", f)
         self._n_actions = self.env.action_space.n
-        self._n_states = len(self._P)
+        self._n_states = len(self.env.P)
 
     @property
     def n_actions(self):
@@ -58,11 +58,11 @@ class Blackjack:
 
     @property
     def P(self):
-        return self._P
+        return self.env.P
 
     @P.setter
     def P(self, P):
-        self._P = P
+        self.env.P = P
 
     @property
     def env(self):

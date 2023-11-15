@@ -8,8 +8,10 @@ def print_runtime(func):
         start = time.time()
         value = func(*args, **kwargs)
         end = time.time()
-        running_time = end - start
-        print("runtime = %.2f seconds" % running_time)
+
+        if kwargs.pop("print_time", True):
+            running_time = end - start
+            print("runtime = %.2f seconds" % running_time)
         return value
     return wrapper_print_runtime
 
