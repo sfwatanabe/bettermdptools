@@ -26,6 +26,11 @@ from utils.decorators import print_runtime
 
 
 class Planner:
+    P: dict
+    """The transitions and reward probabilities for each state-action pair."""
+    policy: dict[int, int] = None
+    """The policy mapping states to actions."""
+
     def __init__(self, P):
         self.P = P
 
@@ -61,7 +66,7 @@ class Planner:
         V_track = np.zeros((n_iters, len(self.P)), dtype=np.float64)
         i = 0
         converged = False
-        while i < n_iters-1 and not converged:
+        while i < n_iters - 1 and not converged:
             i += 1
             Q = np.zeros((len(self.P), len(self.P[0])), dtype=np.float64)
             for s in range(len(self.P)):
@@ -81,8 +86,8 @@ class Planner:
         #       policy[state] = action
         #   return policy[s]
         # Map states to actions, taking the best action for each state
-        # TODO back this with a dictionary so we don't build it every call
-        pi = lambda x: {state:action for state, action in enumerate(np.argmax(Q, axis=1))}[x]
+        self.policy = {st: action for st, action in enumerate(np.argmax(Q, axis=1))}
+        pi = lambda x: self.policy[x]
         return V, V_track, pi
 
     @print_runtime
@@ -126,7 +131,7 @@ class Planner:
         V_track = np.zeros((n_iters, len(self.P)), dtype=np.float64)
         i = 0
         converged = False
-        while i < n_iters-1 and not converged:
+        while i < n_iters - 1 and not converged:
             i += 1
             print(f"Policy Iteration {i}")
             old_pi = {s: pi(s) for s in range(len(self.P))}
@@ -163,6 +168,6 @@ class Planner:
         #       policy[state] = action
         #   return policy[s]
         # Map states to actions, taking the best action for each state
-        # TODO back this with a dictionary so we don't build it every call
-        new_pi = lambda s: {s: a for s, a in enumerate(np.argmax(Q, axis=1))}[s]
+        self.policy = {s: a for s, a in enumerate(np.argmax(Q, axis=1))}
+        new_pi = lambda x: self.policy[x]
         return new_pi

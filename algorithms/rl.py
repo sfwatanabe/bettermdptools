@@ -6,7 +6,7 @@ Copyright (c) 2018, Miguel Morales
 All rights reserved.
 https://github.com/mimoralea/gdrl/blob/master/LICENSE
 """
-import gym
+import gymnasium as gym
 
 """
 modified by: John Mansfield
@@ -38,9 +38,22 @@ class RL:
     Q: np.ndarray
     Q_track: np.ndarray
     policy: dict[int, int] | None
+    build_T: bool = False
+    T: np.ndarray = None
+    R: np.ndarray = None
     dtype: np.dtype
 
-    def __init__(self, env: gym.Env, n_episodes: int, nS: int, nA: int, dtype=np.float64):
+    def __init__(
+            self,
+            env: gym.Env,
+            n_episodes: int,
+            nS: int,
+            nA: int,
+            dtype=np.float64,
+            build_T: bool = False,
+            reward_init: float = 0.00,
+            **kwargs
+    ):
         """
         Initialize the RL class with the environment and basic state action info.
 
@@ -55,14 +68,22 @@ class RL:
         :param nS: The number of states in the environment
         :param nA: The number of actions in the environment
         :param dtype: The data type of the Q and Q_track arrays, default is np.float64
+        :param build_T: Whether to build the transition and reward matrix, default is False
         """
         self.env = env
         self.callbacks = MyCallbacks()
         self.render = False
+        self.n_episodes = n_episodes
 
         # pre-allocate arrays so that we don't have to do it every time
         self.Q = np.zeros((nS, nA), dtype=np.float64)
-        self.Q_track = np.zeros((n_episodes, nS, nA), dtype=dtype)
+        self.Q_track = np.zeros((self.n_episodes, nS, nA), dtype=dtype)
+
+        # initialize T if we're building it
+        self.build_T = build_T
+        if build_T:
+            self.T = np.empty((nS, nA, nS), dtype=dtype)
+            self.R = np.empty((nS, nA, nS), dtype=dtype)
 
     def clear_q_values(self):
         """
@@ -126,7 +147,7 @@ class RL:
                    init_epsilon=1.0,
                    min_epsilon=0.1,
                    epsilon_decay_ratio=0.9,
-                   n_episodes=10000,
+                   # n_episodes=10000,
                    **kwargs):
         """
         Parameters
@@ -162,9 +183,6 @@ class RL:
         
         epsilon_decay_ratio {float}, default = 0.9:
             Decay schedule of epsilon for future iterations
-            
-        n_episodes {int}, default = 10000:
-            Number of episodes for the agent
 
 
         Returns
@@ -205,12 +223,12 @@ class RL:
         alphas = RL.decay_schedule(init_alpha,
                                    min_alpha,
                                    alpha_decay_ratio,
-                                   n_episodes)
+                                   self.n_episodes)
         epsilons = RL.decay_schedule(init_epsilon,
                                      min_epsilon,
                                      epsilon_decay_ratio,
-                                     n_episodes)
-        for e in tqdm(range(n_episodes), leave=False):
+                                     self.n_episodes)
+        for e in tqdm(range(self.n_episodes), leave=False):
             self.callbacks.on_episode_begin(self)
             self.callbacks.on_episode(self, episode=e)
             state, info = self.env.reset()
@@ -221,6 +239,10 @@ class RL:
                     warnings.warn("Occasional render has been deprecated by openAI.  Use test_env.py to render.")
                 action = select_action(state, self.Q, epsilons[e])
                 next_state, reward, terminated, truncated, _ = self.env.step(action)
+                # Record the transition and reward counts if enabled
+                if self.build_T:
+                    self.T[state][action][next_state] += 1
+                    self.R[state][action][next_state] += reward
                 if truncated:
                     warnings.warn("Episode was truncated.  Bootstrapping 0 reward.")
                 done = terminated or truncated
@@ -376,5 +398,6 @@ class RL:
         #   for state, action in enumerate(np.argmax(Q, axis=1)):
         #       policy[state] = action
         #   return policy[s]
-        pi = lambda s: {s: a for s, a in enumerate(np.argmax(Q, axis=1))}[s]
+        self.policy = {s: a for s, a in enumerate(np.argmax(self.Q, axis=1))}
+        pi = lambda s: self.policy[s]
         return Q, V, pi, Q_track, pi_track

@@ -4,14 +4,12 @@ Author: John Mansfield
 """
 
 import os
-import warnings
-
-import gym
-import pygame
-from algorithms.rl import RL
-from algorithms.planner import Planner
-from examples.test_env import TestEnv
 import pickle
+
+import gymnasium as gym
+
+from algorithms.rl import RL
+from examples.test_env import TestEnv
 
 
 class Blackjack:

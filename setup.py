@@ -19,5 +19,5 @@ setup(
     author='John Mansfield',
     author_email='jlm429@gmail.com',
     packages=["algorithms", "utils", "examples"],
-    install_requires=['gym>=0.26, <=0.26.2', 'pygame', 'numpy', 'tqdm', 'pandas', 'seaborn', 'matplotlib'],
+    install_requires=['gymnasium>=0.28.1', 'pygame', 'numpy', 'tqdm', 'pandas', 'seaborn', 'matplotlib'],
 )
